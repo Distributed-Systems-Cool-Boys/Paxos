@@ -2,7 +2,7 @@ These are some basic tests that can be used to check the correctness
 and functionalities of your Paxos implementation. They are not
 comprehensive but should give you enough confidence that your implementation works.
 
-= Dependencies =
+## = Dependencies =
 You need bash and basic unix tools (grep, sed, etc).
 If you want to run the test with msg losses, you need iptables with sudo access.
 
@@ -14,12 +14,12 @@ enabled. You can check using "ifconfig" and checking that the
 
 Using a connected cable/wifi interface will probably not have this problem (e.g. "eth0", "wlan0").
 
-= How to run the tests: =
+## = How to run the tests: =
 
 1) Place the root of your paxos implementation inside this
 directory. For example, if you have the folder:
 
-   ~/paxos-tests/MyPaxos
+   `~/paxos-tests/MyPaxos`
 
 Your *.sh scripts should be directly inside it
 (e.g. ~/paxos-tests/MyPaxos/acceptor.sh) and should work when called
@@ -28,17 +28,17 @@ from inside the directory itself.
 2) Run one of the "run*.sh" from inside THIS folder. When the run
 finishes, run "check_all.sh" to check the output of the run. For
 example:
-
+```sh
     cd ~/paxos-tests/
     ./run.sh MyPaxos 100  # each client will submit 100 values
     # wait for the run to finish
     ./check_all.sh # check the run
-
+```
 3) After a run ends, run "check_all.sh" to see if everything went OK.
 "Test 3" might FAIL in some cases, but with few proposed values and no message
 loss it should also be OK.
 
-= Caveats/Tips =
+## = Caveats/Tips =
 
 a) If you are using a "hardcoded" named network interface
 (e.g. "eth0"), you must make it hardcoded inside your bash scripts
@@ -70,6 +70,7 @@ hand to remove the filter.
 
 g) fake-paxos is a broken implementation that has the "interface" your
 project should follow (bash scripts). You can try and run it using:
-
+```sh
     ./run.sh fake-paxos 100
     ./check_all.sh
+```
