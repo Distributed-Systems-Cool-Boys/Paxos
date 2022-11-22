@@ -2,3 +2,6 @@
 # Testing logs
 learn*
 prop*
+
+# JetBrains sys files
+.idea
