@@ -57,9 +57,41 @@ def proposer(config, id):
 
 def learner(config, id):
     r = mcast_receiver(config['learners'])
+    messages = []
+    learned = 0
     while True:
-        msg = r.recv(2**16)
-        print(msg)
+        # We receive a message which consists out of id of the message and value of the message
+        msg = r.recv(2**32)
+        print("Got:", msg)
+        # We split message into 2 parts: value and id
+        id = int(msg[0:2**16])
+        value = msg[2**16:]
+        # If id is > len(msg) we need to extend array of messages up to the needed size,
+        # we don't show that we learned anything, bc we've extended array without assigning
+        # the message with the smaller id
+        if id > len(msg):
+            while(id - 1 > len(msg)):
+                messages.append(-1)
+            messages.append(value)
+        # If id is = len(msg) we apppend a message to the array,
+        # we don't show that we learned anything if learned isn't equal to msg len
+        # because in this case we're still missing message somewhere in the middle
+        elif id == len(msg):
+            if learned == len(msg):
+                print("Learned: ", value)
+                learned+=1
+            messages.append(value)
+
+        # If id is < len(msg) we swap -1 (value of not received message) with the received value,
+        # then if id == learned, then we can print the value as learned until we reach first
+        # undefined message
+        elif id < len(msg):
+            messages[id] = value
+            if id == learned:
+                while(messages[learned] != -1 and len(messages) > learned):
+                    print("Learned: ", value)
+                    learned += 1
+
         sys.stdout.flush()
 
 
