@@ -28,32 +28,129 @@ def parse_cfg(cfgpath):
             cfg[role] = (host, int(port))
     return cfg
 
+
 # ----------------------------------------------------
+
+### Message structure: ###
+# every chunk <..> is 2 bytes = int range: 0-65535
+# 
+# <instance_number><phase_ID>PHASE_PAYLOAD
+# 
+# phase ID is:
+# 1: phase 1A when receiving, 1B when sending
+# 2: phase 2A when receiving, 2B when sending
+# 
+# PHASE_PAYLOAD is:
+# 1A: <c-rnd>              total = 3 chunks
+# 1B: <rnd><v-rnd><v-val>  total = 5 chunks
+# 2A: <c-rnd><c-val>       total = 4 chunks
+# 2B: <v-rnd><v-val>       total = 4 chunks
+#
+
+## aux. functions
+
+# Encode a paxos message into binary to be sent through the socket.
+#
+# loc: list of chunks, a list of integers containing Paxos info
+# format corresponding to the phase as described above
+#
+def paxos_encode(loc):
+    msg = 0
+    nbytes = 0
+
+    for elem in loc:
+        ## supporting integers only
+        if isinstance(elem, int):
+            msg = msg << 16 | elem ## 2 bytes shift
+            nbytes += 2
+        else:
+            raise Exception('Expected list of integers as argument')
+
+    return msg.to_bytes(nbytes, 'big')
+
+# Decode a binary message received from the socket into a loc
+# (list of chunks), in the same order as received
+def paxos_decode(msg_bin):
+    msg = int.from_bytes(msg_bin, byteorder='big')
+    loc = [] #list of chunks
+    # extract chunks by shifting 2 bytes until the message is empty
+    while msg != 0:
+        loc.insert(0, msg & 2**16 -1) #bitmask last 2 bytes
+        msg = msg >> 16
+    
+    return loc
+
 
 def acceptor(config, id):
     print ('-> acceptor', id)
-    state = {}
+    # init
+    state = {"rnd": 0, "v-rnd": 0, "v-val": 0} # acceptor state
+    # dictionary of acceptor states where
+    # { paxos_instance: state }
+    paxos_instances = {} 
+    
     r = mcast_receiver(config['acceptors'])
     s = mcast_sender()
     while True:
+        # recv to a large buffer
         msg = r.recv(2**16)
-        # fake acceptor! just forwards messages to the learner
-        if id == 1:
-            # print "acceptor: sending %s to learners" % (msg)
-            s.sendto(msg, config['learners'])
+        # extract the instance and phase
+        loc = paxos_decode(msg)
+        instance = loc[0]
+        phase = loc[1]
+
+        
+        if phase == 1:
+            # received phase 1A msg from proposer
+            if loc[2] > state['rnd']:
+                state['rnd'] = loc[2]
+                print("i: {} p: {}, state: {}".format(instance, phase, state))
+                # encode and send phase 1B to proposer
+                msg = paxos_encode([instance, phase, state['rnd'], state['v-rnd'], state['v-val']])
+                s.sendto(msg, config['proposers'])
+        elif phase == 2:
+            # received phase 1A msg from proposer
+            # loc[2] = c-rnd, loc[3] = c-val
+            if loc[2] >= state['rnd']:
+                state['v-rnd'] = loc[2]
+                state['v-val'] = loc[3]
+                print("i: {} p: {}, state: {}".format(instance, phase, state))
+
+                # encode and send phase 2B to proposer
+                msg = paxos_encode([instance, phase, state['v-rnd'], state['v-val']])
+                s.sendto(msg, config['proposers'])
+        else:
+            print('Wrong message received: unknown phase')
+
+        
+
 
 
 def proposer(config, id):
     print ('-> proposer', id)
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
+
+    # dummy proposer for testing
+    for i in range(10):
+        # send phase 1A msg
+        #msg1 = paxos_encode([1,1,3])
+        #s.sendto(msg1, config['acceptors'])
+        # send phase 2A msg
+        msg2 = paxos_encode([1,2,32,3413])
+        s.sendto(msg2, config['acceptors'])
+
+    # 
     while True:
         msg = r.recv(2**16)
         # fake proposer! just forwards message to the acceptor
-        if id == 1:
+        #if id == 1:
             # print "proposer: sending %s to acceptors" % (msg)
-            s.sendto(msg, config['acceptors'])
 
+            # test phase 1a
+            #msg = paxos_encode([1, 2])
+            #s.sendto(msg, config['acceptors'])
+            
 
 def learner(config, id):
     r = mcast_receiver(config['learners'])
