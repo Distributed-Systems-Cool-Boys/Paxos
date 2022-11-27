@@ -66,12 +66,12 @@ def paxos_encode(loc):
         else:
             raise Exception('Expected list of integers as argument')
 
-    return msg.to_bytes(nbytes, 'big')
+    return msg.to_bytes(nbytes, 'big', signed=True)
 
 # Decode a binary message received from the socket into a loc
 # (list of chunks), in the same order as received
 def paxos_decode(msg_bin):
-    msg = int.from_bytes(msg_bin, byteorder='big')
+    msg = int.from_bytes(msg_bin, byteorder='big', signed=True)
     loc = [] #list of chunks
     # extract chunks by shifting 2 bytes until the message is empty
     while msg != 0:
@@ -79,6 +79,7 @@ def paxos_decode(msg_bin):
         msg = msg >> 16
     
     return loc
+
 
 
 def acceptor(config, id):
@@ -134,10 +135,10 @@ def proposer(config, id):
     # dummy proposer for testing
     for i in range(10):
         # send phase 1A msg
-        #msg1 = paxos_encode([1,1,3])
-        #s.sendto(msg1, config['acceptors'])
+        msg1 = paxos_encode([1,1,3])
+        s.sendto(msg1, config['acceptors'])
         # send phase 2A msg
-        msg2 = paxos_encode([1,2,32,3413])
+        msg2 = paxos_encode([1,2,32,0])
         s.sendto(msg2, config['acceptors'])
 
     # 
@@ -152,17 +153,18 @@ def proposer(config, id):
             #s.sendto(msg, config['acceptors'])
             
 
+
 def learner(config, id):
     r = mcast_receiver(config['learners'])
     messages = []
     learned = 0
     while True:
         # We receive a message which consists out of id of the message and value of the message
-        msg = r.recv(2**32)
+        msg = paxos_decode(r.recv(2**16)) ## list (loc): [id, value]
         print("Got:", msg)
         # We split message into 2 parts: value and id
-        id = int(msg[0:2**16])
-        value = msg[2**16:]
+        id = msg[0]
+        value = msg[1]
         # If id is > len(msg) we need to extend array of messages up to the needed size,
         # we don't show that we learned anything, bc we've extended array without assigning
         # the message with the smaller id
