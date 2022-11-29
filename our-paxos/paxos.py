@@ -3,6 +3,9 @@ import sys
 import socket
 import struct
 
+ACCEPTORS_AMOUNT = 3
+QUORUM_AMOUNT = ACCEPTORS_AMOUNT/2 + 1
+
 def mcast_receiver(hostport):
     """create a multicast socket listening to the address"""
     recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -186,26 +189,33 @@ def learner(config, id):
         # the message with the smaller id
         if id > len(messages):
             while(id - 1 > len(messages)):
-                messages.append(-1)
-            messages.append(value)
-        # If id is = len(msg) we apppend a message to the array,
+                messages.append([])
+            messages.append([value])
+        # If id is == len(msg) we apppend a message to the array,
         # we don't show that we learned anything if learned isn't equal to msg len
         # because in this case we're still missing message somewhere in the middle
         elif id == len(messages):
-            if learned == len(messages):
-                print("Learned: ", value)
-                learned+=1
-            messages.append(value)
+            # if learned == len(messages) and len(messages[id]) == QUORUM_AMOUNT - 1:
+            #     if value == messages[id][0]:
+            #         print("Instance: {} Learned: {}".format(id, value))
+            #     learned += 1
+            messages.append([value])
 
         # If id is < len(msg) we swap -1 (value of not received message) with the received value,
         # then if id == learned, then we can print the value as learned until we reach first
         # undefined message
         elif id < len(messages):
-            messages[id] = value
-            if id == learned:
-                while(messages[learned] != -1 and len(messages) > learned):
-                    print("Learned: ", value)
+            if len(messages[id]) == QUORUM_AMOUNT - 1 and id == learned:
+                while(len(messages[learned]) >= QUORUM_AMOUNT and len(messages) > learned):
+                    validity = True
+                    for val in messages[learned]:
+                        if val != messages[learned][0]:
+                            validity = False
+                            break
+                    if validity:
+                        print("Instance: {} Learned: {}".format(learned, messages[learned][0]))
                     learned += 1
+            messages[id].append(value)
 
         sys.stdout.flush()
 
