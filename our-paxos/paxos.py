@@ -129,7 +129,7 @@ def acceptor(config, id):
                 msg = paxos_encode([instance, phase, state['rnd'], state['v-rnd'], state['v-val']])
                 s.sendto(msg, config['proposers'])
         elif phase == 2:
-            # received phase 1A msg from proposer
+            # received phase 2A msg from proposer
             # loc[2] = c-rnd, loc[3] = c-val
             if loc[2] >= state['rnd']:
                 #state['rnd'] = loc[2] # not in the slides, but it makes sense (?)
@@ -139,7 +139,7 @@ def acceptor(config, id):
 
                 # encode and send phase 2B to proposer
                 msg = paxos_encode([instance, phase, state['v-rnd'], state['v-val']])
-                s.sendto(msg, config['proposers'])
+                s.sendto(msg, config['learners'])
         else:
             print('Wrong message received: unknown phase. loc: {}'.format(loc))
 
@@ -184,15 +184,15 @@ def learner(config, id):
         # If id is > len(msg) we need to extend array of messages up to the needed size,
         # we don't show that we learned anything, bc we've extended array without assigning
         # the message with the smaller id
-        if id > len(msg):
-            while(id - 1 > len(msg)):
+        if id > len(messages):
+            while(id - 1 > len(messages)):
                 messages.append(-1)
             messages.append(value)
         # If id is = len(msg) we apppend a message to the array,
         # we don't show that we learned anything if learned isn't equal to msg len
         # because in this case we're still missing message somewhere in the middle
-        elif id == len(msg):
-            if learned == len(msg):
+        elif id == len(messages):
+            if learned == len(messages):
                 print("Learned: ", value)
                 learned+=1
             messages.append(value)
@@ -200,7 +200,7 @@ def learner(config, id):
         # If id is < len(msg) we swap -1 (value of not received message) with the received value,
         # then if id == learned, then we can print the value as learned until we reach first
         # undefined message
-        elif id < len(msg):
+        elif id < len(messages):
             messages[id] = value
             if id == learned:
                 while(messages[learned] != -1 and len(messages) > learned):
