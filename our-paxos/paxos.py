@@ -2,9 +2,11 @@
 import sys
 import socket
 import struct
+from threading import Thread
+from time import sleep
 
 ACCEPTORS_AMOUNT = 3
-QUORUM_AMOUNT = ACCEPTORS_AMOUNT/2 + 1
+QUORUM_AMOUNT = int(ACCEPTORS_AMOUNT/2) + 1
 
 def mcast_receiver(hostport):
     """create a multicast socket listening to the address"""
@@ -139,6 +141,7 @@ def acceptor(config, id):
                 state['v-rnd'] = loc[2]
                 state['v-val'] = loc[3]
                 print("i: {} p: {}, state: {}".format(instance, phase, state))
+                print("Learner message")
 
                 # encode and send phase 2B to proposer
                 msg = paxos_encode([instance, phase, state['v-rnd'], state['v-val']])
@@ -173,11 +176,31 @@ def proposer(config, id):
             
 
 
+# def learner(config, id):
+#     r = mcast_receiver(config['learners'])
+#     s = mcast_sender()
+#     while True:
+#         # TODO: check if id was already processed
+#         # We receive a message which consists out of id of the message and value of the message
+#         init =  r.recv(2**16)
+#         msg = paxos_decode(init) ## list (loc): [size, id, phase, round, value]
+#         print("Got:", msg)
+
 def learner(config, id):
     r = mcast_receiver(config['learners'])
     s = mcast_sender()
     messages = []
+    messages_running = []
     learned = 0
+
+    def learner_timeout(id):
+        sleep(200)
+        # Reseting the quorum and requesting the results for the instance from the acceptors
+        if len(messages[id]) < QUORUM_AMOUNT:
+            messages[id] = []
+            messages_running[id] = False
+            resp = paxos_encode([id, 4])
+            s.sendto(resp, config['acceptors'])
 
     # sending a message to get all of the accepted proposals
     update_message = paxos_encode([id, 3])
@@ -190,57 +213,73 @@ def learner(config, id):
         print("Got:", msg)
         # We split message into 2 parts: value and id
         inst_id = msg[0]
-        # If we received PAXOS round 2 message
-        if(msg[2] == 2):
-            value = msg[3]
-            # If id is > len(msg) we need to extend array of messages up to the needed size,
-            # we don't show that we learned anything, bc we've extended array without assigning
-            # the message with the smaller id
-            if inst_id > len(messages):
-                while(inst_id - 1 > len(messages)):
-                    messages.append([])
-                messages.append([value])
-            # If id is == len(msg) we apppend a message to the array,
-            # we don't show that we learned anything if learned isn't equal to msg len
-            # because in this case we're still missing message somewhere in the middle
-            elif inst_id == len(messages):
-                # if learned == len(messages) and len(messages[id]) == QUORUM_AMOUNT - 1:
-                #     if value == messages[id][0]:
-                #         print("Instance: {} Learned: {}".format(id, value))
-                #     learned += 1
-                messages.append([value])
+        if len(msg) > 1:
+            # If we receive un "update message" from another learner
+            if msg[1] == 1:
+                while inst_id <= len(messages):
+                    messages.append(-1)
+                if messages[inst_id] == -1:
+                    inst_id[inst_id] = msg[3]
 
-            # If id is < len(msg) we swap -1 (value of not received message) with the received value,
-            # then if id == learned, then we can print the value as learned until we reach first
-            # undefined message
-            elif inst_id < len(messages):
-                if len(messages[inst_id]) == QUORUM_AMOUNT - 1 and inst_id == learned:
-                    while(len(messages[learned]) >= QUORUM_AMOUNT and len(messages) > learned):
-                        validity = True
-                        for val in messages[learned]:
-                            if val != messages[learned][0]:
-                                validity = False
-                                break
-                        if validity:
-                            print("Instance: {} Learned: {}".format(learned, messages[learned][0]))
-                        learned += 1
-                messages[inst_id].append(value)
-            resp = paxos_encode([inst_id, 3, value])
-            s.sendto(resp, config['acceptors'])
-        # If we received Learner update message
+            # If we received PAXOS round 2 message
+            if(msg[1] == 2):
+                # print("Instance: {} Learned: {}".format(inst_id, msg[3]))
+                value = msg[3]
+                # If id is > len(msg) we need to extend array of messages up to the needed size,
+                # we don't show that we learned anything, bc we've extended array without assigning
+                # the message with the smaller id
+                if inst_id > len(messages):
+                    print("Init mor: {}".format(inst_id))
+                    while(inst_id - 1 > len(messages)):
+                        messages.append([])
+                        messages_running.append(False)
+                    messages.append([value])
+                    messages_running.append(True)
+                # If id is == len(msg) we apppend a message to the array,
+                # we don't show that we learned anything if learned isn't equal to msg len
+                # because in this case we're still missing message somewhere in the middle
+                elif inst_id == len(messages):
+                    print("Init eq: {}".format(inst_id))
+                    # if learned == len(messages) and len(messages[id]) == QUORUM_AMOUNT - 1:
+                    #     if value == messages[id][0]:
+                    #         print("Instance: {} Learned: {}".format(id, value))
+                    #     learned += 1
+                    messages.append([value])
+                    messages_running.append(True)
 
-        if msg[2] == 3:
-            inst = 0
-            for i in messages:
-                resp = paxos_encode([inst, 1, i])
-                s.sendto(resp, config['learners'])
-                inst += 1
-        if msg[2] == 1:
-            while inst_id <= len(messages):
-                messages.append(-1)
-            if messages[inst_id] == -1:
-                inst_id[inst_id] = msg[3]
+                # If id is < len(msg) we swap -1 (value of not received message) with the received value,
+                # then if id == learned, then we can print the value as learned until we reach first
+                # undefined message
+                elif inst_id < len(messages):
+                    # print("Init les: {}, msg: {}, learned: {}, quorum: {}".format(inst_id, messages[inst_id], learned, QUORUM_AMOUNT))
+                    if len(messages[inst_id]) >= QUORUM_AMOUNT - 1 and inst_id == learned:
+                        messages[inst_id].append(value)
+                        print("Inside if: {}".format(learned))
+                        while(len(messages) > learned and len(messages[learned]) >= QUORUM_AMOUNT ):
+                            validity = True
+                            for val in messages[learned]:
+                                if val != messages[learned][0]:
+                                    validity = False
+                                    break
+                            if validity:
+                                print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
+                            learned += 1
+                    else:
+                        messages[inst_id].append(value)
+                    if len(messages[inst_id]) == 1:
+                        messages_running[inst_id] = True
+                        thread = Thread(target=learner_timeout, args=(inst_id))
+                        thread.start()
+                        thread.join()
 
+
+            # If we received Learner update message, and we need to propagate the data that we know
+            if msg[1] == 3:
+                inst = 0
+                for i in messages:
+                    resp = paxos_encode([inst, 1, i])
+                    s.sendto(resp, config['learners'])
+                    inst += 1
         sys.stdout.flush()
 
 
