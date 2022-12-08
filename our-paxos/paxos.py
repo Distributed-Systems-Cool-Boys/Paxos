@@ -2,6 +2,7 @@
 import sys
 import socket
 import struct
+from time import sleep
 
 def mcast_receiver(hostport):
     """create a multicast socket listening to the address"""
@@ -31,29 +32,28 @@ def parse_cfg(cfgpath):
 
 # ----------------------------------------------------
 
-### Message structure: ###
-# every chunk <..> is 2 bytes = int range: 0-65535
-# 
-# <instance_number><phase_ID>PHASE_PAYLOAD
-# 
-# phase ID is:
-# 1: phase 1A when receiving, 1B when sending
-# 2: phase 2A when receiving, 2B when sending
-# 
-# PHASE_PAYLOAD is:
-# 1A: <c-rnd>              total = 3 chunks
-# 1B: <rnd><v-rnd><v-val>  total = 5 chunks
-# 2A: <c-rnd><c-val>       total = 4 chunks
-# 2B: <v-rnd><v-val>       total = 4 chunks
-#
-
-
 def paxos_encode(loc):
     """Encode a paxos message into binary, to be sent through a network
     socket.
 
     loc -- list of chunks, a list of integers containing Paxos' phase 
     info, including consensus instance number
+    
+    ### Message structure: ###
+    # every chunk <..> is 2 bytes = int range: 0-65535
+    # 
+    # <instance_number><phase_ID>PHASE_PAYLOAD
+    # 
+    # phase ID is:
+    # 1: phase 1A when receiving, 1B when sending
+    # 2: phase 2A when receiving, 2B when sending
+    # 
+    # PHASE_PAYLOAD is:
+    # 1A: <c-rnd>              total = 3 chunks
+    # 1B: <rnd><v-rnd><v-val>  total = 5 chunks
+    # 2A: <c-rnd><c-val>       total = 4 chunks
+    # 2B: <v-rnd><v-val>       total = 4 chunks
+    #
     """
     msg = nbytes = 0
 
@@ -149,25 +149,40 @@ def proposer(config, id):
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
 
-    # dummy proposer for testing
-    for i in range(10):
-        # send phase 1A msg
-        msg1 = paxos_encode([i,1,3])
-        s.sendto(msg1, config['acceptors'])
-        # send phase 2A msg
-        msg2 = paxos_encode([i,2,32,55])
-        s.sendto(msg2, config['acceptors'])
+    # Initialize variables for proposal
+    proposal_number = 0
+    proposal_value = None
 
+    # Send Phase 1A messages
+    phase1A_msg = paxos_encode([1, 1, id])
+    s.sendto(phase1A_msg, config['acceptors'])
+
+    # Wait 0.5 seconds
+    sleep(0.5)
+
+    # Receive Phase 1B messages
+    responses = []
+    
     while True:
         msg = r.recv(2**16)
-        # fake proposer! just forwards message to the acceptor
-        #if id == 1:
-            # print "proposer: sending %s to acceptors" % (msg)
-
-            # test phase 1a
-            #msg = paxos_encode([1, 2])
-            #s.sendto(msg, config['acceptors'])
+        loc = paxos_decode(msg)
+        print("Got:", loc)
+        
+        # Update proposal number and value
+        if loc[3] > proposal_number:
+            proposal_number = loc[3]
+            proposal_value = loc[4]
             
+        # Add response to list
+        responses.append(loc)
+        
+        # If we have received 2f+1 responses, we can move on to Phase 2A
+        if len(responses) == 2 * config['f'] + 1:
+            break
+        
+    # Send Phase 2A messages
+    phase2A_msg = paxos_encode([1, 2, id, proposal_number, proposal_value])
+    s.sendto(phase2A_msg, config['acceptors'])
 
 
 def learner(config, id):

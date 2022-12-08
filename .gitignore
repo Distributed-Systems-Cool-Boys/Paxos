@@ -8,3 +8,5 @@ prop.sorted
 
 # JetBrains sys files
 .idea
+our-paxos/functions copy.py
+our-paxos/proposer2.py
