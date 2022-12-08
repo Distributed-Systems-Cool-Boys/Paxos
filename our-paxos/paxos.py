@@ -145,6 +145,14 @@ def acceptor(config, id):
 
 
 def proposer(config, id):
+    """
+    > The proposer sends a Phase 1A message to all acceptors, waits 0.5 seconds, then receives Phase 1B
+    messages from acceptors until it has received 2f+1 responses. It then sends a Phase 2A message to
+    all acceptors
+    
+    :param config
+    :param id: the id of the proposer
+    """
     print ('-> proposer', id)
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
