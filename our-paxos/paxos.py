@@ -259,7 +259,7 @@ def learner(config, id):
                         messages_running.append(False)
                     messages.append([value])
                     messages_running.append(True)
-                # If id is == len(msg) we apppend a message to the array,
+                # If id is == len(messages) we apppend a message to the array,
                 # we don't show that we learned anything if learned isn't equal to msg len
                 # because in this case we're still missing message somewhere in the middle
                 elif inst_id == len(messages):
@@ -271,7 +271,7 @@ def learner(config, id):
                     messages.append([value])
                     messages_running.append(True)
 
-                # If id is < len(msg) we swap [] (value of not received message) with the received value,
+                # If id is < len(messages) we swap [] (value of not received message) with the received value,
                 # then if id == learned, then we can print the value as learned until we reach first
                 # undefined message
                 elif inst_id < len(messages):
