@@ -141,7 +141,6 @@ def acceptor(config, id):
                 state['v-rnd'] = loc[2]
                 state['v-val'] = loc[3]
                 print("i: {} p: {}, state: {}".format(instance, phase, state))
-                print("Learner message")
 
                 # encode and send phase 2B to proposer
                 msg = paxos_encode([instance, phase, state['v-rnd'], state['v-val']])
@@ -194,7 +193,7 @@ def learner(config, id):
     learned = 0
 
     def learner_timeout(id):
-        sleep(200)
+        sleep(1)
         # Reseting the quorum and requesting the results for the instance from the acceptors
         if len(messages[id]) < QUORUM_AMOUNT:
             messages[id] = []
@@ -217,15 +216,18 @@ def learner(config, id):
             # If we receive un "update message" from another learner
             if msg[1] == 1:
                 while inst_id <= len(messages):
-                    messages.append(-1)
-                if messages[inst_id] == -1:
-                    inst_id[inst_id] = msg[3]
+                    messages.append([])
+                if messages[inst_id] == []:
+                    messages[inst_id].append(msg[3])
+                    messages[inst_id].append(msg[3])
+                    messages[inst_id].append(msg[3])
+                    learned+=1
 
             # If we received PAXOS round 2 message
             if(msg[1] == 2):
                 # print("Instance: {} Learned: {}".format(inst_id, msg[3]))
                 value = msg[3]
-                # If id is > len(msg) we need to extend array of messages up to the needed size,
+                # If id is > len(messages) we need to extend array of messages up to the needed size,
                 # we don't show that we learned anything, bc we've extended array without assigning
                 # the message with the smaller id
                 if inst_id > len(messages):
@@ -247,7 +249,7 @@ def learner(config, id):
                     messages.append([value])
                     messages_running.append(True)
 
-                # If id is < len(msg) we swap -1 (value of not received message) with the received value,
+                # If id is < len(msg) we swap [] (value of not received message) with the received value,
                 # then if id == learned, then we can print the value as learned until we reach first
                 # undefined message
                 elif inst_id < len(messages):
@@ -277,9 +279,12 @@ def learner(config, id):
             if msg[1] == 3:
                 inst = 0
                 for i in messages:
-                    resp = paxos_encode([inst, 1, i])
-                    s.sendto(resp, config['learners'])
-                    inst += 1
+                    if inst < learned:
+                        resp = paxos_encode([inst, 1, i[0]])
+                        s.sendto(resp, config['learners'])
+                        inst += 1
+                    else:
+                        break
         sys.stdout.flush()
 
 
