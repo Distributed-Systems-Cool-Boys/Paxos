@@ -144,10 +144,16 @@ def acceptor(config, id):
                 msg = paxos_encode([id, phase, state['rnd'], state['v-rnd'], state['v-val']])
                 s.sendto(msg, config['proposers'])
 
+                print('*+', id)
                 # start timeout on message 2A
-                thread = Thread(target=acceptor_timeout, args=(id))
+                thread = Thread(target=acceptor_timeout, args=[id])
                 thread.start()
                 thread.join()
+
+                # thread = Thread(target=learner_timeout, args=(inst_id))
+                # thread.start()
+                # thread.join()
+                print('*+', id)
         
         elif phase == 2: # received phase 2A msg from proposer
             
@@ -185,7 +191,7 @@ def proposer(config, id):
 
     # Initialize variables for proposal
     proposal_number = 0
-    proposal_value = None
+    proposal_value = 1
 
     # Send Phase 1A messages
     phase1A_msg = paxos_encode([1, 1, id])
@@ -200,7 +206,7 @@ def proposer(config, id):
     while True:
         msg = r.recv(2**16)
         loc = paxos_decode(msg)
-        print("Got:", loc)
+        # print("Got:", loc)
         
         # Update proposal number and value
         if loc[3] > proposal_number:
@@ -211,7 +217,7 @@ def proposer(config, id):
         responses.append(loc)
         
         # If we have received 2f+1 responses, we can move on to Phase 2A
-        if len(responses) == 2 * config['f'] + 1:
+        if len(responses) >= QUORUM_AMOUNT:
             break
         
     # Send Phase 2A messages
@@ -304,7 +310,7 @@ def learner(config, id):
                         messages[inst_id].append(value)
                 if len(messages[inst_id]) == 1:
                     messages_running[inst_id] = True
-                    thread = Thread(target=learner_timeout, args=(inst_id))
+                    thread = Thread(target=learner_timeout, args=[inst_id])
                     thread.start()
                     thread.join()
 
