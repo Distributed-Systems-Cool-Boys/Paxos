@@ -7,6 +7,7 @@ from time import sleep
 
 ACCEPTORS_AMOUNT = 3
 QUORUM_AMOUNT = int(ACCEPTORS_AMOUNT/2) + 1
+TIMEOUT = 0.5
 
 def mcast_receiver(hostport):
     """create a multicast socket listening to the address"""
@@ -43,26 +44,25 @@ def paxos_encode(loc):
     loc -- list of chunks, a list of integers containing Paxos' phase 
     info, including consensus instance number
     
-    ### Message structure: ###
-    # every chunk <..> is 2 bytes = int range: 0-65535
-    # 
-    # <instance_number><phase_ID>PHASE_PAYLOAD
-    # 
-    # phase ID is:
-    # 1: phase 1A when receiving, 1B when sending
-    # 2: phase 2A when receiving, 2B when sending
-    # 
-    # PHASE_PAYLOAD is:
-    # 1A: <c-rnd>              total = 3 chunks
-    # 1B: <rnd><v-rnd><v-val>  total = 5 chunks
-    # 2A: <c-rnd><c-val>       total = 4 chunks
-    # 2B: <v-rnd><v-val>       total = 4 chunks
-    #
+    Message structure: 
+    every chunk <..> is 2 bytes = int range: 0-65535
+    
+    <instance_number><phase_ID>PHASE_PAYLOAD
+    
+    phase ID is:
+    1: phase 1A when receiving, 1B when sending
+    2: phase 2A when receiving, 2B when sending
+    
+    PHASE_PAYLOAD is:
+    1A: <c-rnd>              total = 3 chunks
+    1B: <rnd><v-rnd><v-val>  total = 5 chunks
+    2A: <c-rnd><c-val>       total = 4 chunks
+    2B: <v-rnd><v-val>       total = 4 chunks
     """
     msg = nbytes = 0
 
     for elem in loc:
-        ## supporting integers only
+        ## ! supporting integers only
         if isinstance(elem, int):
             msg = msg << 16 | elem ## 2 bytes shift
             nbytes += 2
@@ -96,8 +96,6 @@ def paxos_decode(msg_bin):
     
     return loc
 
-
-
 def acceptor(config, id):
     print ('-> acceptor', id)
     # dictionary of acceptor states where
@@ -106,44 +104,69 @@ def acceptor(config, id):
     
     r = mcast_receiver(config['acceptors'])
     s = mcast_sender()
+
+    # timeout when 2A messages are lost
+    def acceptor_timeout(id):
+        sleep(TIMEOUT)
+        state = paxos_instances[id]
+
+        # have we received a phase 2A message?
+        while (state['v-rnd'] != 0):
+            # while not, ask proposer to restart 
+            # consensus for current instance
+            msg = paxos_encode([id, 5])
+            s.sendto(msg, config['proposers'])
+
     while True:
-        # init
-        init_state = {"rnd": 0, "v-rnd": 0, "v-val": 0} # acceptor state
+        init_state = {"rnd": 0, "v-rnd": 0, "v-val": 0}
         # recv to a large buffer
         msg = r.recv(2**16)
-        # extract the instance and phase
+        # extract the instance id and phase
         loc = paxos_decode(msg)
-        instance = loc[0]
+        id = loc[0]
         phase = loc[1]
         
         # set the initial state if it's the first time we start
         # this paxos instance
-        if instance not in paxos_instances.keys():
-            paxos_instances[instance] = init_state
+        if id not in paxos_instances.keys():
+            paxos_instances[id] = init_state
 
-        # let's change the current state
-        state = paxos_instances[instance]
-        if phase == 1:
-            # received phase 1A msg from proposer
-            if loc[2] > state['rnd']:
-                # update state and paxos_
+        # in python changes to state (a dict) will be changed also in
+        # paxos_intances (a dict of dicts). Using to avoid repeating
+        # paxos_intances[instance]
+        state = paxos_instances[id]
+        
+        if phase == 1: # received phase 1A msg from proposer
+            if loc[2] > state['rnd']: # loc[2] = c-rnd
                 state['rnd'] = loc[2]
-                print("i: {} p: {}, state: {}".format(instance, phase, state))
+                print("i: {} p: {}, state: {}".format(id, phase, state))
+
                 # encode and send phase 1B to proposer
-                msg = paxos_encode([instance, phase, state['rnd'], state['v-rnd'], state['v-val']])
+                msg = paxos_encode([id, phase, state['rnd'], state['v-rnd'], state['v-val']])
                 s.sendto(msg, config['proposers'])
-        elif phase == 2:
-            # received phase 2A msg from proposer
-            # loc[2] = c-rnd, loc[3] = c-val
-            if loc[2] >= state['rnd']:
+
+                # start timeout on message 2A
+                thread = Thread(target=acceptor_timeout, args=(id))
+                thread.start()
+                thread.join()
+        
+        elif phase == 2: # received phase 2A msg from proposer
+            
+             # loc[2] = c-rnd, loc[3] = c-val
+             if loc[2] >= state['rnd']:
                 #state['rnd'] = loc[2] # not in the slides, but it makes sense (?)
                 state['v-rnd'] = loc[2]
                 state['v-val'] = loc[3]
-                print("i: {} p: {}, state: {}".format(instance, phase, state))
+                print("i: {} p: {}, state: {}".format(id, phase, state))
 
                 # encode and send phase 2B to proposer
-                msg = paxos_encode([instance, phase, state['v-rnd'], state['v-val']])
+                msg = paxos_encode([id, phase, state['v-rnd'], state['v-val']])
                 s.sendto(msg, config['learners'])
+        
+        elif phase == 4: # received "resend 2B" request from learner timeout
+            msg = paxos_encode([id, 2, state['v-rnd'], state['v-val']])
+            s.sendto(msg, config['learners'])
+        
         else:
             print('Wrong message received: unknown phase. loc: {}'.format(loc))
 
@@ -215,7 +238,7 @@ def learner(config, id):
     learned = 0
 
     def learner_timeout(id):
-        sleep(1)
+        sleep(TIMEOUT)
         # Reseting the quorum and requesting the results for the instance from the acceptors
         if len(messages[id]) < QUORUM_AMOUNT:
             messages[id] = []
