@@ -144,16 +144,10 @@ def acceptor(config, id):
                 msg = paxos_encode([id, phase, state['rnd'], state['v-rnd'], state['v-val']])
                 s.sendto(msg, config['proposers'])
 
-                print('*+', id)
                 # start timeout on message 2A
                 thread = Thread(target=acceptor_timeout, args=[id])
                 thread.start()
                 thread.join()
-
-                # thread = Thread(target=learner_timeout, args=(inst_id))
-                # thread.start()
-                # thread.join()
-                print('*+', id)
         
         elif phase == 2: # received phase 2A msg from proposer
             
@@ -189,40 +183,38 @@ def proposer(config, id):
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
 
-    # Initialize variables for proposal
-    proposal_number = 0
-    proposal_value = 1
+    paxos_instances = {}
+    instance_number = 1
 
-    # Send Phase 1A messages
-    phase1A_msg = paxos_encode([1, 1, id])
-    s.sendto(phase1A_msg, config['acceptors'])
-
-    # Wait 0.5 seconds
-    sleep(0.5)
-
-    # Receive Phase 1B messages
-    responses = []
-    
     while True:
         msg = r.recv(2**16)
         loc = paxos_decode(msg)
-        # print("Got:", loc)
-        
+
+        if loc[1] == 0: # message received from the client
         # Update proposal number and value
-        if loc[3] > proposal_number:
-            proposal_number = loc[3]
-            proposal_value = loc[4]
+            paxos_instances[instance_number] = { "val": loc[2], "c-rnd": 1}
+            print("client sent {}".format(paxos_instances))
+
+            # Send Phase 1A messages
+            phase1A_msg = paxos_encode([loc[0], 1, paxos_instances[loc[0]]["c-rnd"]])
+            s.sendto(phase1A_msg, config['acceptors'])
+            instance_number += 1
+
+        elif loc[1] == 1: # phase 1B received from acceptor
+            print("do your dooties")
+            # Add response to list
+            # responses.append(loc)
             
-        # Add response to list
-        responses.append(loc)
+            # If we have received 2f+1 responses, we can move on to Phase 2A
+            # if len(responses) >= QUORUM_AMOUNT:
+            #     break
+
+            # Send Phase 2A messages
+            # phase2A_msg = paxos_encode([1, 2, id, proposal_number, proposal_value])
+            # s.sendto(phase2A_msg, config['acceptors'])
         
-        # If we have received 2f+1 responses, we can move on to Phase 2A
-        if len(responses) >= QUORUM_AMOUNT:
-            break
-        
-    # Send Phase 2A messages
-    phase2A_msg = paxos_encode([1, 2, id, proposal_number, proposal_value])
-    s.sendto(phase2A_msg, config['acceptors'])
+        elif loc[1] == 5: # restart consenus daddy
+            print("do your dooties")
 
 
 def learner(config, id):
@@ -335,7 +327,7 @@ def client(config, id):
     for value in sys.stdin:
         value = value.strip()
         print ("client: sending %s to proposers" % (value))
-        s.sendto(paxos_encode([inst_id,  0, value]), config['proposers'])
+        s.sendto(paxos_encode([inst_id,  0, int(value)]), config['proposers'])
         inst_id += 1
     print ('client done.')
 
