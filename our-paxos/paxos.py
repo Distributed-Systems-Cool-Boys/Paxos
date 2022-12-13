@@ -313,10 +313,12 @@ def learner(config, id):
 def client(config, id):
     print ('-> client ', id)
     s = mcast_sender()
+    inst_id = 0
     for value in sys.stdin:
         value = value.strip()
         print ("client: sending %s to proposers" % (value))
-        s.sendto(value.encode(), config['proposers'])
+        s.sendto(paxos_encode([inst_id, value, 0]), config['proposers'])
+        inst_id += 1
     print ('client done.')
 
 
