@@ -153,7 +153,6 @@ def acceptor(config, id):
             
              # loc[2] = c-rnd, loc[3] = c-val
              if loc[2] >= state['rnd']:
-                #state['rnd'] = loc[2] # not in the slides, but it makes sense (?)
                 state['v-rnd'] = loc[2]
                 state['v-val'] = loc[3]
                 print("i: {} p: {}, state: {}".format(id, phase, state))
@@ -289,24 +288,24 @@ def learner(config, id):
                 elif inst_id < len(messages):
                     # print("Init les: {}, msg: {}, learned: {}, quorum: {}".format(inst_id, messages[inst_id], learned, QUORUM_AMOUNT))
                     if len(messages[inst_id]) >= QUORUM_AMOUNT - 1 and inst_id == learned:
-                        messages[inst_id].append(value)
                         print("Inside if: {}".format(learned))
-                        while(len(messages) > learned and len(messages[learned]) >= QUORUM_AMOUNT ):
+                        while(len(messages) > learned and len(messages[learned]) >= QUORUM_AMOUNT - 1 ):
                             validity = True
                             for val in messages[learned]:
                                 if val != messages[learned][0]:
                                     validity = False
                                     break
                             if validity:
+                                messages[inst_id].append(value)
                                 print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
                             learned += 1
                     else:
                         messages[inst_id].append(value)
-                    if len(messages[inst_id]) == 1:
-                        messages_running[inst_id] = True
-                        thread = Thread(target=learner_timeout, args=(inst_id))
-                        thread.start()
-                        thread.join()
+                if len(messages[inst_id]) == 1:
+                    messages_running[inst_id] = True
+                    thread = Thread(target=learner_timeout, args=(inst_id))
+                    thread.start()
+                    thread.join()
 
 
             # If we received Learner update message, and we need to propagate the data that we know
