@@ -162,8 +162,9 @@ def acceptor(config, id):
                 s.sendto(msg, config['learners'])
         
         elif phase == 4: # received "resend 2B" request from learner timeout
-            msg = paxos_encode([id, 2, state['v-rnd'], state['v-val']])
-            s.sendto(msg, config['learners'])
+            if state['v-rnd'] != 0:
+                msg = paxos_encode([id, 2, state['v-rnd'], state['v-val']])
+                s.sendto(msg, config['learners'])
         
         else:
             print('Wrong message received: unknown phase. loc: {}'.format(loc))
