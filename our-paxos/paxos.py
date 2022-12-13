@@ -35,8 +35,6 @@ def parse_cfg(cfgpath):
     return cfg
 
 
-# ----------------------------------------------------
-
 def paxos_encode(loc):
     """Encode a paxos message into binary, to be sent through a network
     socket.
@@ -72,7 +70,6 @@ def paxos_encode(loc):
     # put size as last element
     msg = msg << 16 | len(loc)
     nbytes += 2
-
     #encode
     return msg.to_bytes(nbytes, 'big', signed=True)
 
@@ -95,6 +92,8 @@ def paxos_decode(msg_bin):
         msg = msg >> 16
     
     return loc
+
+# ----------------------------------------------------
 
 def acceptor(config, id):
     print ('-> acceptor', id)
@@ -219,16 +218,6 @@ def proposer(config, id):
     phase2A_msg = paxos_encode([1, 2, id, proposal_number, proposal_value])
     s.sendto(phase2A_msg, config['acceptors'])
 
-
-# def learner(config, id):
-#     r = mcast_receiver(config['learners'])
-#     s = mcast_sender()
-#     while True:
-#         # TODO: check if id was already processed
-#         # We receive a message which consists out of id of the message and value of the message
-#         init =  r.recv(2**16)
-#         msg = paxos_decode(init) ## list (loc): [size, id, phase, round, value]
-#         print("Got:", msg)
 
 def learner(config, id):
     r = mcast_receiver(config['learners'])
