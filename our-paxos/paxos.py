@@ -220,7 +220,7 @@ def learner(config, id):
         if len(messages[id]) < QUORUM_AMOUNT:
             messages[id] = []
             messages_running[id] = False
-            resp = paxos_encode([id, 4])
+            resp = paxos_encode([id+1, 4])
             s.sendto(resp, config['acceptors'])
 
     # sending a message to get all of the accepted proposals
@@ -233,7 +233,7 @@ def learner(config, id):
         msg = paxos_decode(r.recv(2**16)) ## list (loc): [size, id, phase, round, value]
         print("Got:", msg)
         # We split message into 2 parts: value and id
-        inst_id = msg[0]
+        inst_id = int(msg[0]) - 1
         if len(msg) > 1:
             # If we receive un "update message" from another learner
             if msg[1] == 1:
@@ -302,7 +302,7 @@ def learner(config, id):
                 inst = 0
                 for i in messages:
                     if inst < learned:
-                        resp = paxos_encode([inst, 1, i[0]])
+                        resp = paxos_encode([inst+1, 1, i[0]])
                         s.sendto(resp, config['learners'])
                         inst += 1
                     else:
@@ -313,10 +313,12 @@ def learner(config, id):
 def client(config, id):
     print ('-> client ', id)
     s = mcast_sender()
+    inst_id = 1
     for value in sys.stdin:
         value = value.strip()
         print ("client: sending %s to proposers" % (value))
-        s.sendto(value.encode(), config['proposers'])
+        s.sendto(paxos_encode([inst_id,  0, value]), config['proposers'])
+        inst_id += 1
     print ('client done.')
 
 
