@@ -220,7 +220,7 @@ def learner(config, id):
         if len(messages[id]) < QUORUM_AMOUNT:
             messages[id] = []
             messages_running[id] = False
-            resp = paxos_encode([id, 4])
+            resp = paxos_encode([id+1, 4])
             s.sendto(resp, config['acceptors'])
 
     # sending a message to get all of the accepted proposals
