@@ -233,7 +233,7 @@ def learner(config, id):
         msg = paxos_decode(r.recv(2**16)) ## list (loc): [size, id, phase, round, value]
         print("Got:", msg)
         # We split message into 2 parts: value and id
-        inst_id = msg[0]
+        inst_id = int(msg[0]) - 1
         if len(msg) > 1:
             # If we receive un "update message" from another learner
             if msg[1] == 1:
@@ -313,7 +313,7 @@ def learner(config, id):
 def client(config, id):
     print ('-> client ', id)
     s = mcast_sender()
-    inst_id = 0
+    inst_id = 1
     for value in sys.stdin:
         value = value.strip()
         print ("client: sending %s to proposers" % (value))
