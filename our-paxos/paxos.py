@@ -317,7 +317,7 @@ def client(config, id):
     for value in sys.stdin:
         value = value.strip()
         print ("client: sending %s to proposers" % (value))
-        s.sendto(paxos_encode([inst_id, value, 0]), config['proposers'])
+        s.sendto(paxos_encode([inst_id,  0, value]), config['proposers'])
         inst_id += 1
     print ('client done.')
 
