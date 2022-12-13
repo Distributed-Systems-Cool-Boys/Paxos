@@ -302,7 +302,7 @@ def learner(config, id):
                 inst = 0
                 for i in messages:
                     if inst < learned:
-                        resp = paxos_encode([inst, 1, i[0]])
+                        resp = paxos_encode([inst+1, 1, i[0]])
                         s.sendto(resp, config['learners'])
                         inst += 1
                     else:
