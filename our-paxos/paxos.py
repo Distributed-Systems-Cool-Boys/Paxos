@@ -183,22 +183,60 @@ def proposer(config, id):
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
 
-    # Initialize variables for proposal
-    proposal_number = 0
-    proposal_value = None
+    # initialize variables
+    round_num = 0
+    highest_rnd = 0
+    value = None
+    instances = {}
 
     # Send Phase 1A messages
-    phase1A_msg = paxos_encode([1, 1, id])
-    s.sendto(phase1A_msg, config['acceptors'])
+    # phase1A_msg = paxos_encode([1, 1, id])
+    # s.sendto(phase1A_msg, config['acceptors'])
 
     # Wait 0.5 seconds
-    sleep(0.5)
+    # sleep(0.5)
 
-    # Receive Phase 1B messages
+    # Values from client
+    client_values = []
+    
+    # Responses
     responses = []
     
     while True:
-        msg = r.recv(2**16)
+        try:
+            msg = r.recv(2**16)
+            msg = paxos_decode(msg)
+            if msg[1] == 0: # if the phase is 0 then the message is coming from the client
+                value = loc[2]
+                client_values.append(value)
+                print("Got value:", value)
+        except:
+            pass
+        
+        # Send Phase 1A messages
+        if not value: # if we didn't get a value from the client
+            round_num += 1
+            paxos_instance = round_num
+            phase = 1 # Phase 1A
+            payload = paxos_encode([paxos_instance, phase, id, round_num]) 
+            s.sendto(payload, config['acceptors'])
+            
+            # Wait 0.5 seconds
+            sleep(0.5)
+        # Receive Phase 1B messages
+        else:
+            round_num += 1 
+            paxos_instance, phase, rnd, vrnd, vval = paxos_decode(msg)
+            if rnd > highest_rnd:
+                highest_rnd = rnd
+                value = vval
+            instances[paxos_instance] = {"rnd": rnd, "v-rnd": vrnd, "v-val": vval}
+            # if a minimum of QUORUM_AMOUNT of acceptors have responded, we can move on to Phase 2A
+            if len(instances) == QUORUM_AMOUNT:
+                paxos_instance = 1
+                phase = 2
+                payload = paxos_encode([paxos_instance, phase, id, highest_rnd, value])
+                s.sendto(payload, config['acceptors'])
         loc = paxos_decode(msg)
         print("Got:", loc)
         
