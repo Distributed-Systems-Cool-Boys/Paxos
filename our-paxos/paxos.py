@@ -4,6 +4,7 @@ import socket
 import struct
 from threading import Thread
 from time import sleep
+import time
 
 ACCEPTORS_AMOUNT = 3
 QUORUM_AMOUNT = int(ACCEPTORS_AMOUNT/2) + 1
@@ -171,6 +172,7 @@ def acceptor(config, id):
 
 
 def proposer(config, id):
+            
     """
     > The proposer sends a Phase 1A message to all acceptors, waits 0.5 seconds, then receives Phase 1B
     messages from acceptors until it has received 2f+1 responses. It then sends a Phase 2A message to
@@ -183,6 +185,18 @@ def proposer(config, id):
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
 
+    def send_message_with_timeout(s, payload):
+        message = paxos_encode(payload)
+        s.sendto(message, config['acceptors'])
+        start_time = time.time()
+        while (time.time() - start_time) < TIMEOUT:
+            response = mcast_receiver(config['proposers']).recv(2**16)
+            response = paxos_decode(response)
+            if response and len(message) == 2:
+                payload[1] = 2
+                payload[3] += 1
+                s.sendto(message, config['acceptors'][0][id]) # [0][id] or [id][0]?
+            
     # initialize variables
     round_num = 0
     highest_rnd = 0
@@ -207,54 +221,38 @@ def proposer(config, id):
             msg = r.recv(2**16)
             msg = paxos_decode(msg)
             if msg[1] == 0: # if the phase is 0 then the message is coming from the client
-                value = loc[2]
+                value = msg[2]
                 client_values.append(value)
                 print("Got value:", value)
         except:
             pass
         
         # Send Phase 1A messages
-        if not value: # if we didn't get a value from the client
+        if not value: # if we didn't get a value from the client message
             round_num += 1
-            paxos_instance = round_num
+            #paxos_instance = round_num
             phase = 1 # Phase 1A
-            payload = paxos_encode([paxos_instance, phase, id, round_num]) 
+            payload = paxos_encode([paxos_instance, phase, round_num]) 
             s.sendto(payload, config['acceptors'])
             
-            # Wait 0.5 seconds
+            # Wait 0.5 seconds 
             sleep(0.5)
+            
         # Receive Phase 1B messages
-        else:
+        else: # if we got a value from the client message
             round_num += 1 
             paxos_instance, phase, rnd, vrnd, vval = paxos_decode(msg)
             if rnd > highest_rnd:
                 highest_rnd = rnd
                 value = vval
             instances[paxos_instance] = {"rnd": rnd, "v-rnd": vrnd, "v-val": vval}
-            # if a minimum of QUORUM_AMOUNT of acceptors have responded, we can move on to Phase 2A
+            # if a minimum of QUORUM_AMOUNT of acceptors have responded, we can move on to Phase 2A and send the message
             if len(instances) == QUORUM_AMOUNT:
-                paxos_instance = 1
+                #paxos_instance = 1
                 phase = 2
-                payload = paxos_encode([paxos_instance, phase, id, highest_rnd, value])
-                s.sendto(payload, config['acceptors'])
-        loc = paxos_decode(msg)
-        print("Got:", loc)
-        
-        # Update proposal number and value
-        if loc[3] > proposal_number:
-            proposal_number = loc[3]
-            proposal_value = loc[4]
-            
-        # Add response to list
-        responses.append(loc)
-        
-        # If we have received 2f+1 responses, we can move on to Phase 2A
-        if len(responses) == 2 * config['f'] + 1:
-            break
-        
-    # Send Phase 2A messages
-    phase2A_msg = paxos_encode([1, 2, id, proposal_number, proposal_value])
-    s.sendto(phase2A_msg, config['acceptors'])
+                payload = [paxos_instance, phase, id, highest_rnd, value]
+                # Send message with timeout
+                send_message_with_timeout(s, payload)
 
 
 def learner(config, id):
