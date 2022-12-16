@@ -203,18 +203,8 @@ def proposer(config, id):
     value = None
     instances = {}
 
-    # Send Phase 1A messages
-    # phase1A_msg = paxos_encode([1, 1, id])
-    # s.sendto(phase1A_msg, config['acceptors'])
-
-    # Wait 0.5 seconds
-    # sleep(0.5)
-
     # Values from client
     client_values = []
-    
-    # Responses
-    responses = []
     
     while True:
         try:
@@ -228,9 +218,9 @@ def proposer(config, id):
             pass
         
         # Send Phase 1A messages
-        if not value: # if we didn't get a value from the client message
+        if msg[2] == 0: # if we didn't get a value from the client message
             round_num += 1
-            #paxos_instance = round_num
+            paxos_instance = round_num # Instance number, so we have a different instance for each value from client. Not sure if this is correct
             phase = 1 # Phase 1A
             payload = paxos_encode([paxos_instance, phase, round_num]) 
             s.sendto(payload, config['acceptors'])
@@ -239,7 +229,7 @@ def proposer(config, id):
             sleep(0.5)
             
         # Receive Phase 1B messages
-        else: # if we got a value from the client message
+        else: # if we got a message from acceptors at this point it must be a Phase 1B message
             round_num += 1 
             paxos_instance, phase, rnd, vrnd, vval = paxos_decode(msg)
             if rnd > highest_rnd:
