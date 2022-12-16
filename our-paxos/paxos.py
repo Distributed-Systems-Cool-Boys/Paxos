@@ -218,7 +218,7 @@ def proposer(config, id):
             pass
         
         # Send Phase 1A messages
-        if msg[2] == 0: # if we didn't get a value from the client message
+        if msg[1] == 0: # if the phase is 0 then the message is coming from the client and we can send Phase 1A messages
             round_num += 1
             paxos_instance = round_num # Instance number, so we have a different instance for each value from client. Not sure if this is correct
             phase = 1 # Phase 1A
