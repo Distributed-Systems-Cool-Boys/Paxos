@@ -146,7 +146,7 @@ def acceptor(config, id):
                 s.sendto(msg, config['proposers'])
 
                 # start timeout on message 2A
-                thread = Thread(target=acceptor_timeout, args=(id))
+                thread = Thread(target=acceptor_timeout, args=[id])
                 thread.start()
                 thread.join()
         
@@ -201,7 +201,7 @@ def proposer(config, id):
     round_num = 0
     highest_rnd = 0
     value = None
-    instances = {}
+    paxos_instances = {}
 
     # Values from client
     client_values = []
@@ -224,21 +224,24 @@ def proposer(config, id):
             sleep(0.5)
             
         # Receive Phase 1B messages
-        else: # if we got a message from acceptors at this point it must be a Phase 1B message
+        elif msg[1] == 1: # if we got a message from acceptors at this point it must be a Phase 1B message
             round_num += 1 
             paxos_instance, phase, rnd, vrnd, vval = paxos_decode(msg)
             if rnd > highest_rnd:
                 highest_rnd = rnd
                 value = vval
-            instances[paxos_instance] = {"rnd": rnd, "v-rnd": vrnd, "v-val": vval} #TODO
+            paxos_instances[paxos_instance].append({"rnd": rnd, "v-rnd": vrnd, "v-val": vval}) #TODO
             # if a minimum of QUORUM_AMOUNT of acceptors have responded, we can move on to Phase 2A and send the message
-            if len(instances) == QUORUM_AMOUNT:
+            if len(paxos_instances[paxos_instance]) == QUORUM_AMOUNT:
                 #paxos_instance = 1
                 phase = 2
                 payload = [paxos_instance, phase, rnd, highest_rnd, value]
                 # Send message with timeout
                 send_message_with_timeout(s, payload)
             #TODO PHASE 5
+        elif msg[1] == 5:
+            # Reset consensus instance
+            
 
 
 def learner(config, id):
@@ -326,7 +329,7 @@ def learner(config, id):
                         messages[inst_id].append(value)
                 if len(messages[inst_id]) == 1:
                     messages_running[inst_id] = True
-                    thread = Thread(target=learner_timeout, args=(inst_id))
+                    thread = Thread(target=learner_timeout, args=[inst_id])
                     thread.start()
                     thread.join()
 
@@ -351,7 +354,7 @@ def client(config, id):
     for value in sys.stdin:
         value = value.strip()
         print ("client: sending %s to proposers" % (value))
-        s.sendto(paxos_encode([inst_id,  0, value]), config['proposers'])
+        s.sendto(paxos_encode([inst_id,  0, int(value)]), config['proposers'])
         inst_id += 1
     print ('client done.')
 
