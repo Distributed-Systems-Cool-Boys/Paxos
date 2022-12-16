@@ -237,7 +237,9 @@ def proposer(config, id):
                 phase = 2
                 payload = [paxos_instance, phase, rnd, highest_rnd, value]
                 # Send message with timeout
-                send_message_with_timeout(s, payload)
+                msg = paxos_encode(payload)
+                s.sendto(msg, config['acceptors'])
+                #send_message_with_timeout(s, payload)
         elif msg[1] == 5:
             # Reset consensus instance
             round_num += 1 
