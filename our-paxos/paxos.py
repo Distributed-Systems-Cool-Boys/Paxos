@@ -207,18 +207,13 @@ def proposer(config, id):
     client_values = []
     
     while True:
-        try:
-            msg = r.recv(2**16)
-            msg = paxos_decode(msg)
-            if msg[1] == 0: # if the phase is 0 then the message is coming from the client
-                value = msg[2]
-                client_values.append(value)
-                print("Got value:", value)
-        except:
-            pass
+        msg = r.recv(2**16)
+        msg = paxos_decode(msg)
         
         # Send Phase 1A messages
         if msg[1] == 0: # if the phase is 0 then the message is coming from the client and we can send Phase 1A messages
+            value = msg[2]
+            client_values.append(value)
             round_num += 1
             paxos_instance = round_num # Instance number, so we have a different instance for each value from client. Not sure if this is correct
             phase = 1 # Phase 1A
