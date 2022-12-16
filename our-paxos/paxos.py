@@ -201,7 +201,7 @@ def proposer(config, id):
             instance_number += 1
 
         elif loc[1] == 1: # phase 1B received from acceptor
-            print("do stuff")
+            print("do your dooties")
             # Add response to list
             # responses.append(loc)
             
@@ -214,7 +214,7 @@ def proposer(config, id):
             # s.sendto(phase2A_msg, config['acceptors'])
         
         elif loc[1] == 5: # restart consenus daddy
-            print("do stuff")
+            print("do your dooties")
 
 
 def learner(config, id):
