@@ -230,7 +230,7 @@ def proposer(config, id):
             if rnd > highest_rnd:
                 highest_rnd = rnd
                 value = vval
-            paxos_instances[paxos_instance].append({"rnd": rnd, "v-rnd": vrnd, "v-val": vval}) #TODO
+            paxos_instances[paxos_instance].append({"rnd": rnd, "v-rnd": vrnd, "v-val": vval})
             # if a minimum of QUORUM_AMOUNT of acceptors have responded, we can move on to Phase 2A and send the message
             if len(paxos_instances[paxos_instance]) == QUORUM_AMOUNT:
                 #paxos_instance = 1
@@ -238,10 +238,11 @@ def proposer(config, id):
                 payload = [paxos_instance, phase, rnd, highest_rnd, value]
                 # Send message with timeout
                 send_message_with_timeout(s, payload)
-            #TODO PHASE 5
         elif msg[1] == 5:
             # Reset consensus instance
-            
+            round_num += 1 
+            # Resend instance asked by acceptor
+            # paxos_instance = msg[2]
 
 
 def learner(config, id):
