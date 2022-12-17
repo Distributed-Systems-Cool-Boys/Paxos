@@ -189,13 +189,13 @@ def proposer(config, id):
         message = paxos_encode(payload)
         s.sendto(message, config['acceptors'])
         start_time = time.time()
-        while (time.time() - start_time) < TIMEOUT:
-            response = mcast_receiver(config['proposers']).recv(2**16)
-            response = paxos_decode(response)
-            if response and len(message) == 2:
-                payload[1] = 2
-                payload[3] += 1
-                s.sendto(message, config['acceptors'][0][id]) # [0][id] or [id][0]?
+        time.sleep(TIMEOUT)
+        response = mcast_receiver(config['proposers']).recv(2**16)
+        response = paxos_decode(response)
+        if response[1] == 1 and len(message) <= 3:
+            payload[2] += 1
+            message = paxos_encode(payload)
+            s.sendto(message, config['acceptors']) # [0][id] or [id][0]?
             
     # initialize variables
     round_num = 0
@@ -217,11 +217,8 @@ def proposer(config, id):
             round_num += 1
             paxos_instance = round_num # Instance number, so we have a different instance for each value from client. Not sure if this is correct
             phase = 1 # Phase 1A
-            payload = paxos_encode([paxos_instance, phase, round_num]) 
-            s.sendto(payload, config['acceptors'])
-            
-            # Wait 0.5 seconds 
-            sleep(0.5)
+            payload = [paxos_instance, phase, round_num]
+            send_message_with_timeout(s, payload)
             
         # Receive Phase 1B messages
         elif msg[1] == 1: # if we got a message from acceptors at this point it must be a Phase 1B message
@@ -244,7 +241,11 @@ def proposer(config, id):
             # Reset consensus instance
             round_num += 1 
             # Resend instance asked by acceptor
-            # paxos_instance = msg[2]
+            paxos_instance = msg[0]
+            phase = 1
+            payload = [paxos_instance, phase, round_num]
+            message = paxos_encode(payload)
+            s.sendto(message, config['acceptors'])
 
 
 def learner(config, id):
