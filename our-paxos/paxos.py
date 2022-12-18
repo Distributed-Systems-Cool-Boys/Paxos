@@ -4,11 +4,12 @@ import socket
 import struct
 from threading import Thread
 from time import sleep
-import time
 
 ACCEPTORS_AMOUNT = 3
+PROPOSERS_AMOUNT = 2
 QUORUM_AMOUNT = int(ACCEPTORS_AMOUNT/2) + 1
-TIMEOUT = 10
+TIMEOUT = 1 # in seconds
+
 
 def mcast_receiver(hostport):
     """create a multicast socket listening to the address"""
@@ -107,16 +108,17 @@ def acceptor(config, id):
 
     # timeout when 2A messages are lost
     def acceptor_timeout(id):
-        print("in timeout")
         sleep(TIMEOUT)
         state = paxos_instances[id]
 
         # have we received a phase 2A message?
-        while (state['v-rnd'] != 0):
+        while (paxos_instances[id]['v-rnd'] == 0):
+            print("resend request for instance: {}".format(id))
             # while not, ask proposer to restart 
             # consensus for current instance
             msg = paxos_encode([id, 5])
             s.sendto(msg, config['proposers'])
+            sleep(TIMEOUT)
 
     while True:
         init_state = {"rnd": 0, "v-rnd": 0, "v-val": 0}
@@ -147,9 +149,8 @@ def acceptor(config, id):
                 s.sendto(msg, config['proposers'])
 
                 # start timeout on message 2A
-                # thread = Thread(target=acceptor_timeout, args=[id])
-                # thread.start()
-                # thread.join()
+                #thread = Thread(target=acceptor_timeout, args=[id])
+                #thread.start()
         
         elif phase == 2: # received phase 2A msg from proposer
             
@@ -172,9 +173,9 @@ def acceptor(config, id):
         else:
             print('Wrong message received: unknown phase. loc: {}'.format(loc))
 
-
+# global for multiproposer
+#paxos_instance = 1 # init to 1 because 0 = default value
 def proposer(config, id):
-            
     """
     > The proposer sends a Phase 1A message to all acceptors, waits 0.5 seconds, then receives Phase 1B
     messages from acceptors until it has received 2f+1 responses. It then sends a Phase 2A message to
@@ -184,31 +185,35 @@ def proposer(config, id):
     :param id: the id of the proposer
     """
     print ('-> proposer', id)
+    # initialize variables
     r = mcast_receiver(config['proposers'])
     s = mcast_sender()
 
-    def send_message_with_timeout(s, payload):
-        start_time = time.time()
-        time.sleep(TIMEOUT)
-        response = mcast_receiver(config['proposers']).recv(2**16)
-        response = paxos_decode(response)
-        if response[1] == 1 and len(message) <= 3:
-            payload[2] += 1
-            message = paxos_encode(payload)
-            s.sendto(message, config['acceptors']) # [0][id] or [id][0]?
-            
-    # initialize variables
-    #round_num = 0
-    #highest_rnd = 0
-    #value = None
     # dictionary of proposer states where { paxos_instance: state }
     # state: {"c-rnd": .., "client-val": .., "Q": .., "highest-v-rnd": .., c-val}
     paxos_instances = {}
-    paxos_instance = 1 # init to 1 because 0 = default value
+    pinit = 1
 
-    # Values from client
-    #client_values = []
-    
+    def proposer_timeout(id):
+        sleep(TIMEOUT)
+        state = paxos_instances[id]
+
+        # have we received a a quorum of 1B messages?
+        while (paxos_instances[id]["Q"] < QUORUM_AMOUNT):
+            print("restart instance: {}".format(id))
+            # if not, start a new round, send phase 5 to itself
+            new_rnd = state["c-rnd"] + 1
+            # get original value
+            clientval = state["client-val"]
+            # reset the instance
+            paxos_instances[id] = {"c-rnd": new_rnd, "client-val": clientval, 
+                                   "Q": 0, "highest-v-rnd": 0, "c-val": 0}
+            phase = 1
+            payload = [id, phase, new_rnd]
+            message = paxos_encode(payload)
+            s.sendto(message, config['acceptors'])
+            sleep(TIMEOUT)
+            
     while True:
         msg = r.recv(2**16)
         msg = paxos_decode(msg)
@@ -218,22 +223,22 @@ def proposer(config, id):
             value = msg[2]
             #client_values.append(value)
             round_num = 1 # init to 1 because 0 = default value
-            # paxos_instance = round_num # Instance number, so we have a different instance for each value from client. Not sure if this is correct
-            paxos_instances[paxos_instance] = {"c-rnd": round_num, "client-val": value, 
+            paxos_instances[pinit] = {"c-rnd": round_num, "client-val": value, 
                                                "Q": 0, "highest-v-rnd": 0, "c-val": 0}
             phase = 1 # Phase 1A
-            payload = [paxos_instance, phase, round_num]
-            print("1A send: {}, state: {}".format(paxos_instance, paxos_instances[paxos_instance]))
+            payload = [pinit, phase, round_num]
+            print("1A send: {}, state: {}".format(pinit, paxos_instances[pinit]))
             message = paxos_encode(payload)
             s.sendto(message, config['acceptors'])
-            paxos_instance += 1
-            #send_message_with_timeout(s, payload)
+            
+            # thread = Thread(target=proposer_timeout, args=[paxos_instance])
+            # thread.start()
+
+            pinit += 1
             
         # Receive Phase 1B messages
         elif msg[1] == 1:
-            # round_num += 1 
             paxos_instance, phase, rnd, vrnd, vval = msg
-            
             # update state given acceptors are in the same round
             state = paxos_instances[paxos_instance]
             if state["c-rnd"] == rnd:
@@ -242,12 +247,10 @@ def proposer(config, id):
                     state["highest-v-rnd"] = vrnd
                     state["c-val"] = vval
             print("1B recv: {}, state: {}".format(paxos_instance, state))
-            # if rnd > highest_rnd:
-            #     highest_rnd = rnd
-            #     value = vval
-            #paxos_instances[paxos_instance] = {"rnd": rnd, "v-rnd": vrnd, "v-val": vval}
-            # if a minimum of QUORUM_AMOUNT of acceptors have responded, we can move on to Phase 2A and send the message
-            if paxos_instances[paxos_instance]["Q"] >= QUORUM_AMOUNT:
+
+            # if a minimum of QUORUM_AMOUNT of acceptors have responded, 
+            # we can move on to Phase 2A and send the message
+            if paxos_instances[paxos_instance]["Q"] == QUORUM_AMOUNT:
 
                 phase = 2
                 if state["highest-v-rnd"] == 0:
@@ -259,13 +262,17 @@ def proposer(config, id):
                 msg = paxos_encode(payload)
                 s.sendto(msg, config['acceptors'])
 
-        elif msg[1] == 5:
-            # Reset consensus instance
-            round_num += 1 
-            # Resend instance asked by acceptor
-            paxos_instance = msg[0]
+        elif msg[1] == 5: # Restart consensus for given instance
+
+            # increase round number
+            new_rnd = paxos_instances[msg[0]]["c-rnd"] + 1
+            # get original value
+            clientval = paxos_instances[msg[0]]["client-val"]
+            # reset the isntance
+            paxos_instances[msg[0]] = {"c-rnd": new_rnd, "client-val": clientval, 
+                                               "Q": 0, "highest-v-rnd": 0, "c-val": 0}
             phase = 1
-            payload = [paxos_instance, phase, round_num]
+            payload = [msg[0], phase, new_rnd]
             message = paxos_encode(payload)
             s.sendto(message, config['acceptors'])
 
@@ -289,7 +296,7 @@ def learner(config, id):
     # sending a message to get all of the accepted proposals
     update_message = paxos_encode([id, 3])
     just_sent_update = True
-    print("Update requested")
+    # print("Update requested")
     s.sendto(update_message, config['learners'])
 
     while True:
@@ -308,26 +315,29 @@ def learner(config, id):
             # If we receive un "update message" from another learner
 
             if msg[1] == 1:
-                print("Received update")
+                # print("Received update")
                 while inst_id >= len(messages):
                     messages.append([])
+                    messages_running.append(True)
                 if len(messages[inst_id]) < QUORUM_AMOUNT:
                     messages[inst_id].append(msg[2])
                     messages[inst_id].append(msg[2])
                     messages[inst_id].append(msg[2])
-                    print("Learned instance: {}".format(learned))
-                    print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], 3))
+                    # print("Learned instance: {}".format(learned))
+                    # print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], 3))
+                    print(messages[learned][0])
                     learned+=1
 
             # If we received PAXOS round 2 message
             elif(msg[1] == 2):
                 # print("Instance: {} Learned: {}".format(inst_id, msg[3]))
                 value = msg[3]
+                # print("Id: ", inst_id)
                 # If id is > len(messages) we need to extend array of messages up to the needed size,
                 # we don't show that we learned anything, bc we've extended array without assigning
                 # the message with the smaller id
                 if inst_id > len(messages):
-                    while(inst_id - 1 > len(messages)):
+                    while(inst_id > len(messages)):
                         messages.append([])
                         messages_running.append(False)
                     messages.append([value])
@@ -357,16 +367,21 @@ def learner(config, id):
                                     break
                             if validity:
                                 messages[inst_id].append(value)
-                                print("Learned instance: {}".format(learned))
-                                print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
+                                # print("Learned instance: {}".format(learned))
+                                # print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
+                                print(messages[learned][0])
                             learned += 1
                     else:
                         messages[inst_id].append(value)
-                # if len(messages[inst_id]) == 1:
-                #     messages_running[inst_id] = True
-                #     thread = Thread(target=learner_timeout, args=[inst_id])
-                #     thread.start()
-                #     thread.join()
+
+                # print("Messages len: ", len(messages))
+                # print("Messages running len: ", len(messages_running))
+                # print("Id: ", inst_id)
+                if len(messages[inst_id]) == 1:
+                    messages_running[inst_id] = True
+                    thread = Thread(target=learner_timeout, args=[inst_id])
+                    thread.start()
+                    #thread.join()
 
 
             # If we received Learner update message, and we need to propagate the data that we know
@@ -375,7 +390,7 @@ def learner(config, id):
                 # messages.append([0])
                 for i in messages:
                     if inst < learned:
-                        print("broadcasting: ", i[0])
+                        # print("broadcasting: ", i[0])
                         # resp = paxos_encode([inst+1, 1, i[0]])
                         resp = paxos_encode([inst+1, 1, int(i[0])])
                         s.sendto(resp, config['learners'])
