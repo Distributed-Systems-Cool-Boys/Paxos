@@ -288,28 +288,38 @@ def learner(config, id):
 
     # sending a message to get all of the accepted proposals
     update_message = paxos_encode([id, 3])
+    just_sent_update = True
+    print("Update requested")
     s.sendto(update_message, config['learners'])
 
     while True:
         # TODO: check if id was already processed
         # We receive a message which consists out of id of the message and value of the message
         msg = paxos_decode(r.recv(2**16)) ## list (loc): [size, id, phase, round, value]
+        # if just_sent_update and msg[1] == 3:
+        #     just_sent_update = False
+        #     continue
+        # else:
+        #     just_sent_update = False
         print("Got:", msg)
         # We split message into 2 parts: value and id
         inst_id = int(msg[0]) - 1
         if len(msg) > 1:
             # If we receive un "update message" from another learner
+
             if msg[1] == 1:
-                while inst_id <= len(messages):
+                print("Received update")
+                while inst_id >= len(messages):
                     messages.append([])
-                if messages[inst_id] == []:
-                    messages[inst_id].append(msg[3])
-                    messages[inst_id].append(msg[3])
-                    messages[inst_id].append(msg[3])
+                if len(messages[inst_id]) < QUORUM_AMOUNT:
+                    messages[inst_id].append(msg[2])
+                    messages[inst_id].append(msg[2])
+                    messages[inst_id].append(msg[2])
+                    print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], 3))
                     learned+=1
 
             # If we received PAXOS round 2 message
-            if(msg[1] == 2):
+            elif(msg[1] == 2):
                 # print("Instance: {} Learned: {}".format(inst_id, msg[3]))
                 value = msg[3]
                 # If id is > len(messages) we need to extend array of messages up to the needed size,
@@ -361,15 +371,24 @@ def learner(config, id):
 
 
             # If we received Learner update message, and we need to propagate the data that we know
-            if msg[1] == 3:
+            elif msg[1] == 3:
+                print("Learner update")
                 inst = 0
+                print("State:",messages)
+                # messages.append([0])
                 for i in messages:
                     if inst < learned:
-                        resp = paxos_encode([inst+1, 1, i[0]])
+                        print("broadcasting: ", i[0])
+                        # resp = paxos_encode([inst+1, 1, i[0]])
+                        resp = paxos_encode([inst+1, 1, int(i[0])])
                         s.sendto(resp, config['learners'])
+                        print("Message was broadcasted")
                         inst += 1
                     else:
                         break
+            else:
+                resp = paxos_encode([503])
+                s.sendto(resp, config['learners'])
         sys.stdout.flush()
 
 
