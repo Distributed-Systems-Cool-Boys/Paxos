@@ -4,16 +4,19 @@ instances, one for each value proposed by the clients.
 Our paxos implementation has the following features
 
 - Phase 3 optimization: messages are sent from acceptors directly to learners
-- Timeouts for fault tolerance
+- Timeouts in acceptor, learner and proposer for fault tolerance using threading
 
 ## Notes
-- We use 0 as defaukt value
+- We use 0 as default value
 
 ## Known limitations
+- We have some **race conditions** that deadlock the program when more than ~100 values
+are proposed. Therefore, only a subset of the proposed values will be learned. The values
+should be consistent nontheless.  
 - Only non-zero positive integers are acceptable values
-- single acceptor quorum for successive timeouts caused by:
+- single acceptor quorum for successive timeouts could be caused by:
     - message loss
-    - Message delat
+    - Message delay
 
 
 # Skeleton README

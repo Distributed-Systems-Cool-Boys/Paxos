@@ -8,7 +8,7 @@ from time import sleep
 ACCEPTORS_AMOUNT = 3
 PROPOSERS_AMOUNT = 2
 QUORUM_AMOUNT = int(ACCEPTORS_AMOUNT/2) + 1
-TIMEOUT = 1 # in seconds
+TIMEOUT = 0.5 # in seconds
 
 
 def mcast_receiver(hostport):
@@ -149,8 +149,8 @@ def acceptor(config, id):
                 s.sendto(msg, config['proposers'])
 
                 # start timeout on message 2A
-                #thread = Thread(target=acceptor_timeout, args=[id])
-                #thread.start()
+                thread = Thread(target=acceptor_timeout, args=[id])
+                thread.start()
         
         elif phase == 2: # received phase 2A msg from proposer
             
@@ -196,18 +196,24 @@ def proposer(config, id):
 
     def proposer_timeout(id):
         sleep(TIMEOUT)
-        state = paxos_instances[id]
+        #state = paxos_instances[id]
 
         # have we received a a quorum of 1B messages?
         while (paxos_instances[id]["Q"] < QUORUM_AMOUNT):
             print("restart instance: {}".format(id))
             # if not, start a new round, send phase 5 to itself
-            new_rnd = state["c-rnd"] + 1
+            new_rnd = paxos_instances[id]["c-rnd"] + 1
             # get original value
-            clientval = state["client-val"]
+            clientval = paxos_instances[id]["client-val"]
             # reset the instance
-            paxos_instances[id] = {"c-rnd": new_rnd, "client-val": clientval, 
-                                   "Q": 0, "highest-v-rnd": 0, "c-val": 0}
+            # paxos_instances[id] = {"c-rnd": new_rnd, "client-val": clientval, 
+            #                        "Q": 0, "highest-v-rnd": 0, "c-val": 0}
+            paxos_instances[id]["c-rnd"] = new_rnd
+            paxos_instances[id]["client-val"] = clientval
+            paxos_instances[id]["Q"] = 0
+            paxos_instances[id]["highest-v-rnd"] = 0
+            paxos_instances[id]["c-val"] = 0
+            print(paxos_instances[id])
             phase = 1
             payload = [id, phase, new_rnd]
             message = paxos_encode(payload)
@@ -231,8 +237,8 @@ def proposer(config, id):
             message = paxos_encode(payload)
             s.sendto(message, config['acceptors'])
             
-            # thread = Thread(target=proposer_timeout, args=[paxos_instance])
-            # thread.start()
+            thread = Thread(target=proposer_timeout, args=[pinit])
+            thread.start()
 
             pinit += 1
             
@@ -240,8 +246,9 @@ def proposer(config, id):
         elif msg[1] == 1:
             paxos_instance, phase, rnd, vrnd, vval = msg
             # update state given acceptors are in the same round
-            state = paxos_instances[paxos_instance]
-            if state["c-rnd"] == rnd:
+            state = paxos_instances[msg[0]]
+
+            if state["c-rnd"] <= rnd:
                 state["Q"] += 1
                 if vrnd > state["highest-v-rnd"]:
                     state["highest-v-rnd"] = vrnd
@@ -250,7 +257,7 @@ def proposer(config, id):
 
             # if a minimum of QUORUM_AMOUNT of acceptors have responded, 
             # we can move on to Phase 2A and send the message
-            if paxos_instances[paxos_instance]["Q"] == QUORUM_AMOUNT:
+            if paxos_instances[paxos_instance]["Q"] >= QUORUM_AMOUNT:
 
                 phase = 2
                 if state["highest-v-rnd"] == 0:
@@ -300,16 +307,9 @@ def learner(config, id):
     s.sendto(update_message, config['learners'])
 
     while True:
-        # TODO: check if id was already processed
         # We receive a message which consists out of id of the message and value of the message
         msg = paxos_decode(r.recv(2**16)) ## list (loc): [size, id, phase, round, value]
-        # if just_sent_update and msg[1] == 3:
-        #     just_sent_update = False
-        #     continue
-        # else:
-        #     just_sent_update = False
-        # print("Got:", msg)
-        # We split message into 2 parts: value and id
+
         inst_id = int(msg[0]) - 1
         if len(msg) > 1:
             # If we receive un "update message" from another learner
