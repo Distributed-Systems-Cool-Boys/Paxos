@@ -296,7 +296,7 @@ def learner(config, id):
     # sending a message to get all of the accepted proposals
     update_message = paxos_encode([id, 3])
     just_sent_update = True
-    #print("Update requested")
+    # print("Update requested")
     s.sendto(update_message, config['learners'])
 
     while True:
@@ -315,15 +315,17 @@ def learner(config, id):
             # If we receive un "update message" from another learner
 
             if msg[1] == 1:
-                #print("Received update")
+                # print("Received update")
                 while inst_id >= len(messages):
                     messages.append([])
+                    messages_running.append(True)
                 if len(messages[inst_id]) < QUORUM_AMOUNT:
                     messages[inst_id].append(msg[2])
                     messages[inst_id].append(msg[2])
                     messages[inst_id].append(msg[2])
-                    #print("Learned instance: {}".format(learned))
-                    #print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], 3))
+                    # print("Learned instance: {}".format(learned))
+                    # print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], 3))
+                    print(messages[learned][0])
                     learned+=1
 
             # If we received PAXOS round 2 message
@@ -364,18 +366,19 @@ def learner(config, id):
                                     break
                             if validity:
                                 messages[inst_id].append(value)
+                                # print("Learned instance: {}".format(learned))
+                                # print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
                                 print(messages[learned][0])
-                                #print("Learned instance: {}".format(learned))
-                                #print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
                             learned += 1
                     else:
                         messages[inst_id].append(value)
 
-                print("Inst id: ", inst_id)
-                # if len(messages[inst_id]) == 1:
-                #     messages_running[inst_id] = True
-                #     thread = Thread(target=learner_timeout, args=[inst_id])
-                #     thread.start()
+                # print("Messages len: ", len(messages))
+                # print("Messages running len: ", len(messages_running))
+                if len(messages[inst_id]) == 1:
+                    messages_running[inst_id] = True
+                    thread = Thread(target=learner_timeout, args=[inst_id])
+                    thread.start()
                     #thread.join()
 
 
@@ -385,7 +388,7 @@ def learner(config, id):
                 # messages.append([0])
                 for i in messages:
                     if inst < learned:
-                        #print("broadcasting: ", i[0])
+                        # print("broadcasting: ", i[0])
                         # resp = paxos_encode([inst+1, 1, i[0]])
                         resp = paxos_encode([inst+1, 1, int(i[0])])
                         s.sendto(resp, config['learners'])
