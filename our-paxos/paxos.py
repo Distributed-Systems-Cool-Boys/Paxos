@@ -332,11 +332,12 @@ def learner(config, id):
             elif(msg[1] == 2):
                 # print("Instance: {} Learned: {}".format(inst_id, msg[3]))
                 value = msg[3]
+                # print("Id: ", inst_id)
                 # If id is > len(messages) we need to extend array of messages up to the needed size,
                 # we don't show that we learned anything, bc we've extended array without assigning
                 # the message with the smaller id
                 if inst_id > len(messages):
-                    while(inst_id - 1 > len(messages)):
+                    while(inst_id > len(messages)):
                         messages.append([])
                         messages_running.append(False)
                     messages.append([value])
@@ -375,6 +376,7 @@ def learner(config, id):
 
                 # print("Messages len: ", len(messages))
                 # print("Messages running len: ", len(messages_running))
+                # print("Id: ", inst_id)
                 if len(messages[inst_id]) == 1:
                     messages_running[inst_id] = True
                     thread = Thread(target=learner_timeout, args=[inst_id])
