@@ -186,8 +186,6 @@ def proposer(config, id):
     s = mcast_sender()
 
     def send_message_with_timeout(s, payload):
-        message = paxos_encode(payload)
-        s.sendto(message, config['acceptors'])
         start_time = time.time()
         time.sleep(TIMEOUT)
         response = mcast_receiver(config['proposers']).recv(2**16)
@@ -218,12 +216,15 @@ def proposer(config, id):
             paxos_instance = round_num # Instance number, so we have a different instance for each value from client. Not sure if this is correct
             phase = 1 # Phase 1A
             payload = [paxos_instance, phase, round_num]
-            send_message_with_timeout(s, payload)
+            print("1A: {}".format(payload))
+            message = paxos_encode(payload)
+            s.sendto(message, config['acceptors'])
+            #send_message_with_timeout(s, payload)
             
         # Receive Phase 1B messages
         elif msg[1] == 1: # if we got a message from acceptors at this point it must be a Phase 1B message
             round_num += 1 
-            paxos_instance, phase, rnd, vrnd, vval = paxos_decode(msg)
+            paxos_instance, phase, rnd, vrnd, vval = msg
             if rnd > highest_rnd:
                 highest_rnd = rnd
                 value = vval
