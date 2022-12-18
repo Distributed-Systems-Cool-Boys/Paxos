@@ -371,7 +371,8 @@ def learner(config, id):
                             learned += 1
                     else:
                         messages[inst_id].append(value)
-                
+
+                print("Inst id: ", inst_id)
                 if len(messages[inst_id]) == 1:
                     messages_running[inst_id] = True
                     thread = Thread(target=learner_timeout, args=[inst_id])
