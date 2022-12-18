@@ -301,7 +301,7 @@ def learner(config, id):
         #     continue
         # else:
         #     just_sent_update = False
-        print("Got:", msg)
+        # print("Got:", msg)
         # We split message into 2 parts: value and id
         inst_id = int(msg[0]) - 1
         if len(msg) > 1:
@@ -315,6 +315,7 @@ def learner(config, id):
                     messages[inst_id].append(msg[2])
                     messages[inst_id].append(msg[2])
                     messages[inst_id].append(msg[2])
+                    print("Learned instance: {}".format(learned))
                     print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], 3))
                     learned+=1
 
@@ -326,7 +327,6 @@ def learner(config, id):
                 # we don't show that we learned anything, bc we've extended array without assigning
                 # the message with the smaller id
                 if inst_id > len(messages):
-                    print("Init mor: {}".format(inst_id))
                     while(inst_id - 1 > len(messages)):
                         messages.append([])
                         messages_running.append(False)
@@ -336,7 +336,6 @@ def learner(config, id):
                 # we don't show that we learned anything if learned isn't equal to msg len
                 # because in this case we're still missing message somewhere in the middle
                 elif inst_id == len(messages):
-                    print("Init eq: {}".format(inst_id))
                     # if learned == len(messages) and len(messages[id]) == QUORUM_AMOUNT - 1:
                     #     if value == messages[id][0]:
                     #         print("Instance: {} Learned: {}".format(id, value))
@@ -350,7 +349,6 @@ def learner(config, id):
                 elif inst_id < len(messages):
                     # print("Init les: {}, msg: {}, learned: {}, quorum: {}".format(inst_id, messages[inst_id], learned, QUORUM_AMOUNT))
                     if len(messages[inst_id]) >= QUORUM_AMOUNT - 1 and inst_id == learned:
-                        print("Inside if: {}".format(learned))
                         while(len(messages) > learned and len(messages[learned]) >= QUORUM_AMOUNT - 1 ):
                             validity = True
                             for val in messages[learned]:
@@ -359,6 +357,7 @@ def learner(config, id):
                                     break
                             if validity:
                                 messages[inst_id].append(value)
+                                print("Learned instance: {}".format(learned))
                                 print("Instance: {} Learned: {} Amount:{}".format(learned, messages[learned][0], len(messages[learned])))
                             learned += 1
                     else:
@@ -372,9 +371,7 @@ def learner(config, id):
 
             # If we received Learner update message, and we need to propagate the data that we know
             elif msg[1] == 3:
-                print("Learner update")
                 inst = 0
-                print("State:",messages)
                 # messages.append([0])
                 for i in messages:
                     if inst < learned:
@@ -382,7 +379,6 @@ def learner(config, id):
                         # resp = paxos_encode([inst+1, 1, i[0]])
                         resp = paxos_encode([inst+1, 1, int(i[0])])
                         s.sendto(resp, config['learners'])
-                        print("Message was broadcasted")
                         inst += 1
                     else:
                         break
